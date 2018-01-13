@@ -1,5 +1,7 @@
 #include "Scenario.h"
+#include "lib/main.h"
 #include "lib/utils.h"
+#include "lib/keyboard.h"
 #include "lib/rapidjson/writer.h"
 #include "Rewarders\GeneralRewarder.h"
 #include "Rewarders\LaneRewarder.h"
@@ -72,7 +74,10 @@ void Scenario::parseDatasetConfig(const Value& dc, bool setDefaults) {
 	else if (setDefaults) {
 		width = _WIDTH_;
 		height = _HEIGHT_;
-	}	
+	}
+
+	if (setDefaults) baseAddr = true;
+	if (setDefaults) keys = true;
 
 	if (!dc["vehicles"].IsNull()) vehicles = dc["vehicles"].GetBool();
 	else if (setDefaults) vehicles = _VEHICLES_;
@@ -98,8 +103,14 @@ void Scenario::parseDatasetConfig(const Value& dc, bool setDefaults) {
 
 	if (dc["reward"].IsArray()) {
 		if (dc["reward"][0].IsFloat() && dc["reward"][1].IsFloat()) {
-			rewarder = new GeneralRewarder((char*)(GetCurrentModulePath() + "paths.xml").c_str(), dc["reward"][0].GetFloat(), dc["reward"][1].GetFloat());
-			reward = true;
+			try{
+				rewarder = new GeneralRewarder((char*)(GetCurrentModulePath() + "paths.xml").c_str(), dc["reward"][0].GetFloat(), dc["reward"][1].GetFloat());
+				reward = true;
+			}
+			catch (const char* e) {
+				freopen("deepgtav.log", "a", stdout);
+				printf("%s", *e);
+			}
 		}
 		else if (setDefaults) reward = _REWARD_;
 	}
@@ -127,6 +138,7 @@ void Scenario::parseDatasetConfig(const Value& dc, bool setDefaults) {
 	Document::AllocatorType& allocator = d.GetAllocator();
 	Value a(kArrayType);
 
+	if (baseAddr) d.AddMember("baseaddr", 0x0, allocator);
 	if (vehicles) d.AddMember("vehicles", a, allocator);
 	if (peds) d.AddMember("peds", a, allocator);
 	if (trafficSigns) d.AddMember("trafficSigns", a, allocator);
@@ -140,6 +152,7 @@ void Scenario::parseDatasetConfig(const Value& dc, bool setDefaults) {
 	if (drivingMode) d.AddMember("drivingMode", 0, allocator);
 	if (location) d.AddMember("location", a, allocator);
 	if (time) d.AddMember("time", 0, allocator);
+	if (keys) d.AddMember("keys", 0, allocator);
 
 	screenCapturer = new ScreenCapturer(width, height);
 }
@@ -196,7 +209,7 @@ void Scenario::buildScenario() {
 
 void Scenario::start(const Value& sc, const Value& dc) {
 	if (running) return;
-
+	
 	//Parse options
 	srand(std::time(NULL));
 	parseScenarioConfig(sc, true);
@@ -292,6 +305,7 @@ StringBuffer Scenario::generateMessage() {
 	
 	screenCapturer->capture();
 
+	if (baseAddr) setBaseAddr();
 	if (vehicles) setVehiclesList();
 	if (peds) setPedsList();
 	if (trafficSigns); //TODO
@@ -305,6 +319,7 @@ StringBuffer Scenario::generateMessage() {
 	if (drivingMode); //TODO
 	if (location) setLocation();
 	if (time) setTime();
+	if (keys) setKeyDown();
 
 	d.Accept(writer);
 
@@ -576,17 +591,24 @@ void Scenario::setPedsList(){
 	d["peds"] = _peds;
 }
 
+void Scenario::setBaseAddr() {
+	//angelapper get base address
+	BYTE* vehicel_base_addr = getScriptHandleBaseAddress(vehicle);
+	d["baseaddr"] = (LONG)vehicel_base_addr;
+}
 
 void Scenario::setThrottle(){
-	d["throttle"] = getFloatValue(vehicle, 0x92C);
+	d["throttle"] = getFloatValue(vehicle, 0x8D4);
 }
 
+//[0,1]
 void Scenario::setBrake(){
-	d["brake"] = getFloatValue(vehicle, 0x930);
+	d["brake"] = getFloatValue(vehicle, 0x8D8);
 }
 
+//[-1,1]
 void Scenario::setSteering(){
-	d["steering"] = -getFloatValue(vehicle, 0x924) / 0.6981317008;
+	d["steering"] = -getFloatValue(vehicle, 0x8CC) / 0.6981317008;
 }
 
 void Scenario::setSpeed(){
@@ -601,13 +623,26 @@ void Scenario::setYawRate(){
 void Scenario::setLocation(){
 	Document::AllocatorType& allocator = d.GetAllocator();
 	Vector3 pos = ENTITY::GET_ENTITY_COORDS(vehicle, false);
+	INT onRoad = 0;
+	if (!PATHFIND::IS_POINT_ON_ROAD(pos.x, pos.y, pos.z, 0)){
+		onRoad = -1;
+	}
+
 	Value location(kArrayType);
-	location.PushBack(pos.x, allocator).PushBack(pos.y, allocator).PushBack(pos.z, allocator);
+
+	location.PushBack(pos.x, allocator).PushBack(pos.y, allocator)
+		.PushBack(pos.z, allocator)
+		.PushBack(onRoad, allocator);
 	d["location"] = location;
 }
 
 void Scenario::setTime(){
 	d["time"] = TIME::GET_CLOCK_HOURS();
+}
+
+void Scenario::setKeyDown() {
+	int down_keys=IsKeyDown(0x57) << 3 | IsKeyDown(0x41) << 2 | IsKeyDown(0x53) << 1 | IsKeyDown(0x44);
+	d["keys"] = down_keys;
 }
 
 void Scenario::setDirection(){
@@ -622,5 +657,11 @@ void Scenario::setDirection(){
 }
 
 void Scenario::setReward() {
-	d["reward"] = rewarder->computeReward(vehicle);
+	try{
+		d["reward"] = rewarder->computeReward(vehicle);
+	}
+	catch (const char* e) {
+		freopen("deepgtav.log", "a", stdout);
+		printf("%s", e);
+	}
 }

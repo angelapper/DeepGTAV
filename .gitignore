@@ -1,2 +1,10 @@
 tmp/
+bak/
 bin/Release/paths.xml
+.vs/
+.suo
+*.db
+*.suo
+*.user
+*.userosscache
+*.sln.docstates

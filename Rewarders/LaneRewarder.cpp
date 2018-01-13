@@ -41,12 +41,20 @@ float LaneRewarder::computeReward(Vehicle vehicle) {
 
 	if (pointPair.size() != 2) return -1.0;
 
+	float draw_z = 0.0;
+
+	GAMEPLAY::GET_GROUND_Z_FOR_3D_COORD(currentPosition.x, currentPosition.y, 1000.0,
+		&draw_z, 0);
+
+	GRAPHICS::DRAW_LINE(currentPosition.x, currentPosition.y, draw_z*2,
+		pointPair.at(1).coord.x, pointPair.at(1).coord.y, draw_z*2, 0, 0, 255, 255);
+
 	forwardVector = ENTITY::GET_ENTITY_FORWARD_VECTOR(vehicle);
 	direction = forwardVector.x*link.direction.x + forwardVector.y*link.direction.y;
 
 	laneCenter.x = (pointPair.at(0).coord.x + pointPair.at(1).coord.x) / 2.0f;
 	laneCenter.y = (pointPair.at(0).coord.y + pointPair.at(1).coord.y) / 2.0f;
-
+	
 	a = GAMEPLAY::GET_ANGLE_BETWEEN_2D_VECTORS(currentPosition.x - laneCenter.x, currentPosition.y - laneCenter.y, pointPair.at(0).coord.x - laneCenter.x, pointPair.at(0).coord.y - laneCenter.y);
 	d = SYSTEM::VDIST(currentPosition.x, currentPosition.y, 0, laneCenter.x, laneCenter.y, 0);
 	reward = 1.0f - (d*abs(SYSTEM::COS(a))) / SYSTEM::VDIST(pointPair.at(0).coord.x, pointPair.at(0).coord.y, 0, laneCenter.x, laneCenter.y, 0);
@@ -71,6 +79,8 @@ void LaneRewarder::populateNodes(const char* pathsfile){
 	std::unordered_map<std::string, tNode> tmpnodes;
 	tLink *tmplinks = (tLink*)malloc(80592 * sizeof(*tmplinks)); //Too large for the stack, need to store in the heap
 	int i = 0;
+	
+	freopen("deepgtav.log", "a", stdout);
 
 	tinyxml2::XMLDocument doc;
 	tinyxml2::XMLElement* object;
@@ -79,9 +89,12 @@ void LaneRewarder::populateNodes(const char* pathsfile){
 	tinyxml2::XMLElement* ref1;
 	tinyxml2::XMLElement* ref2;
 
-	doc.LoadFile(pathsfile);
+	INT load_status = doc.LoadFile(pathsfile);
+
 	object = doc.FirstChildElement()->FirstChildElement()->FirstChildElement();
+
 	for (object; object; object = object->NextSiblingElement()) {
+
 		if (object->Attribute("class", "vehiclenode")) {
 			tNode node = { 0 };
 			node.attr.speed = 4;
@@ -201,31 +214,52 @@ void LaneRewarder::populateNodes(const char* pathsfile){
 		}
 	}
 
+
 	//Puts everything into place for fast searching by nodeID
 	tNode node1;
 	tNode node2;
 	tLink link;
 	float m;
-	for (i = 0; i < 80592; i++){
+	//for (i = 0; i < 80592; i++){
+	INT length = i;
+    for (i=0; i < length; i++) {
 		link = tmplinks[i];
-		node1 = tmpnodes[link._ref1];
-		node2 = tmpnodes[link._ref2];
-		m = GAMEPLAY::GET_DISTANCE_BETWEEN_COORDS(node1.coord.x, node1.coord.y, 0, node2.coord.x, node2.coord.y, 0, FALSE);
-		link.direction.x = (node2.coord.x - node1.coord.x) / m; //Unitary vector pointing in the direction of the road
-		link.direction.y = (node2.coord.y - node1.coord.y) / m;
 
-		try {
-			node1 = nodes.at(node1.id);
-			node2 = nodes.at(node2.id);
-		}
-		catch (const std::out_of_range) {
-			//Empty on purpose
-		}
+		if (tmpnodes.find(link._ref1) != tmpnodes.end()
+			&& tmpnodes.find(link._ref2) != tmpnodes.end()){
+			node1 = tmpnodes[link._ref1];
+			node2 = tmpnodes[link._ref2];
 
-		setLinePoints(&node1, link);
-		setLinePoints(&node2, link);
-		nodes[node1.id] = node1;
-		nodes[node2.id] = node2;
+			m = GAMEPLAY::GET_DISTANCE_BETWEEN_COORDS(node1.coord.x, node1.coord.y, 0, node2.coord.x, node2.coord.y, 0, FALSE);
+			link.direction.x = (node2.coord.x - node1.coord.x) / m; //Unitary vector pointing in the direction of the road
+			link.direction.y = (node2.coord.y - node1.coord.y) / m;
+			/*
+					try {
+						node1 = nodes.at(node1.id);
+						node2 = nodes.at(node2.id);
+						printf("node %d, node %d\n", node1.id, node2.id);
+					}
+					catch (const std::out_of_range) {
+						//Empty on purpose
+					}
+			*/
+			if (nodes.find(node1.id) != nodes.end()) {
+				node1 = nodes.at(node1.id);
+			}
+			else{
+				nodes[node1.id] = node1;
+			}
+
+			if (nodes.find(node2.id) != nodes.end()) {
+				node2 = nodes.at(node2.id);
+			}
+			else {
+				nodes[node2.id] = node2;
+			}
+
+			setLinePoints(&node1, link);
+			setLinePoints(&node2, link);
+		}
 	}
 	free(tmplinks);
 }

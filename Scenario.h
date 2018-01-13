@@ -33,6 +33,7 @@ private:
 	const char* _vehicle;
 	int width, height;
 
+	bool baseAddr;
 	bool vehicles;
 	bool peds;
 	bool trafficSigns; //TODO
@@ -46,6 +47,7 @@ private:
 	bool drivingMode; //TODO
 	bool location;
 	bool time;
+	bool keys;
 
 	float currentThrottle = 0.0;
 	float currentBrake = 0.0;
@@ -76,6 +78,7 @@ private:
 	void parseDatasetConfig(const Value& dc, bool setDefaults);
 	void buildScenario();
 
+	void setBaseAddr();
 	void setVehiclesList();
 	void setPedsList();
 	void setTrafficSignsList();
@@ -89,4 +92,5 @@ private:
 	void setDrivingMode();
 	void setLocation();
 	void setTime();
+	void setKeyDown();
 };
