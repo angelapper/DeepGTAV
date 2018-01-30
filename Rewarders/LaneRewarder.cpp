@@ -1,6 +1,8 @@
 #include <map>
 #include "LaneRewarder.h"
 #include "../lib/tinyxml2.h"
+#include "../lib/utils.h"
+#include<vector>
 
 LaneRewarder::LaneRewarder(const char* pathsfile) {
 	while (nodes.size() == 0) {
@@ -23,13 +25,19 @@ float LaneRewarder::computeReward(Vehicle vehicle) {
 	tNode node;
 	tLink link;
 
+//	freopen("deepgtav.log", "a+", stdout);
+
 	currentPosition = ENTITY::GET_ENTITY_COORDS(vehicle, FALSE);
+	
+	//printf("Currnet Pos.%f,%f,%f\n",currentPosition.x, currentPosition.y, currentPosition.z);
+
 	if (!PATHFIND::IS_POINT_ON_ROAD(currentPosition.x, currentPosition.y, currentPosition.z, 0)) return -1.0;
 
 	for (int i = 1; i <= 6; i++) {
 		nodeID = PATHFIND::GET_NTH_CLOSEST_VEHICLE_NODE_ID(currentPosition.x, currentPosition.y, currentPosition.z, i, 1, 300, 300);
 		node = nodes[nodeID];
 		if (node.attr.special > 0) continue;
+//		printf("Search for ID %d, size %d\n", nodeID, node.links.size());
 		for (int j = 0; j < node.links.size(); j++){
 			link = node.links.at(j);
 			if (link.attr.shortcut || link.attr.width == -1) continue;
@@ -41,20 +49,29 @@ float LaneRewarder::computeReward(Vehicle vehicle) {
 
 	if (pointPair.size() != 2) return -1.0;
 
-	float draw_z = 0.0;
-
-	GAMEPLAY::GET_GROUND_Z_FOR_3D_COORD(currentPosition.x, currentPosition.y, 1000.0,
-		&draw_z, 0);
-
-	GRAPHICS::DRAW_LINE(currentPosition.x, currentPosition.y, draw_z*2,
-		pointPair.at(1).coord.x, pointPair.at(1).coord.y, draw_z*2, 0, 0, 255, 255);
-
 	forwardVector = ENTITY::GET_ENTITY_FORWARD_VECTOR(vehicle);
 	direction = forwardVector.x*link.direction.x + forwardVector.y*link.direction.y;
+/*	
+	printf("first points found %f,%f,%f\n", 
+		pointPair.at(0).coord.x, pointPair.at(0).coord.y, pointPair.at(0).coord.z);
+	
+	printf("second points found %f,%f,%f\n",
+		pointPair.at(1).coord.x, pointPair.at(1).coord.y, pointPair.at(1).coord.z);
+	
+	GRAPHICS::DRAW_MARKER(6, pointPair.at(0).coord.x, pointPair.at(0).coord.y, pointPair.at(0).coord.z,
+		0, 0, 0, 0, 0, 0, 2, 2, 2, 255, 128, 0, 200, 0, 1, 1, 0, 0, 0, 0);
+
+	GRAPHICS::DRAW_MARKER(6, pointPair.at(1).coord.x, pointPair.at(1).coord.y, pointPair.at(1).coord.z,
+		0, 0, 0, 0, 0, 0, 2, 2, 2, 255, 128, 0, 200, 0, 1, 1, 0, 0, 0, 0);
+*/
 
 	laneCenter.x = (pointPair.at(0).coord.x + pointPair.at(1).coord.x) / 2.0f;
 	laneCenter.y = (pointPair.at(0).coord.y + pointPair.at(1).coord.y) / 2.0f;
 	
+/*	
+	GRAPHICS::DRAW_MARKER(6, laneCenter.x, laneCenter.y, pointPair.at(1).coord.z,
+		0, 0, 0, 0, 0, 0, 2, 2, 2, 255, 128, 0, 200, 0, 1, 1, 0, 0, 0, 0);
+*/
 	a = GAMEPLAY::GET_ANGLE_BETWEEN_2D_VECTORS(currentPosition.x - laneCenter.x, currentPosition.y - laneCenter.y, pointPair.at(0).coord.x - laneCenter.x, pointPair.at(0).coord.y - laneCenter.y);
 	d = SYSTEM::VDIST(currentPosition.x, currentPosition.y, 0, laneCenter.x, laneCenter.y, 0);
 	reward = 1.0f - (d*abs(SYSTEM::COS(a))) / SYSTEM::VDIST(pointPair.at(0).coord.x, pointPair.at(0).coord.y, 0, laneCenter.x, laneCenter.y, 0);
@@ -80,7 +97,7 @@ void LaneRewarder::populateNodes(const char* pathsfile){
 	tLink *tmplinks = (tLink*)malloc(80592 * sizeof(*tmplinks)); //Too large for the stack, need to store in the heap
 	int i = 0;
 	
-	freopen("deepgtav.log", "a", stdout);
+	//freopen("deepgtav.log", "a+", stdout);
 
 	tinyxml2::XMLDocument doc;
 	tinyxml2::XMLElement* object;
@@ -159,7 +176,7 @@ void LaneRewarder::populateNodes(const char* pathsfile){
 
 				}
 			}
-			node.id = PATHFIND::GET_NTH_CLOSEST_VEHICLE_NODE_ID(node.coord.x, node.coord.y, node.coord.z, 1, 1, 300, 300);
+			node.id = PATHFIND::GET_NTH_CLOSEST_VEHICLE_NODE_ID(node.coord.x, node.coord.y, node.coord.z, 1, 1, 0x40400000, 0);
 			//PATHFIND::GET_CLOSEST_VEHICLE_NODE_WITH_HEADING(node.coord.x, node.coord.y, node.coord.z, &dummy, &(node.heading), nodetype, 300, 300);
 			//node.nodeID = PATHFIND::GET_NTH_CLOSEST_VEHICLE_NODE_ID_WITH_HEADING(node.coord.x, node.coord.y, node.coord.z, 1, &dummy, &(node.heading), nodetype, 300, 300);
 			tmpnodes[std::string(object->Attribute("guid"))] = node;
@@ -222,13 +239,19 @@ void LaneRewarder::populateNodes(const char* pathsfile){
 	float m;
 	//for (i = 0; i < 80592; i++){
 	INT length = i;
-    for (i=0; i < length; i++) {
+	Vector3 tmpCorrd;
+
+	for (i=0; i < length; i++) {
 		link = tmplinks[i];
 
 		if (tmpnodes.find(link._ref1) != tmpnodes.end()
 			&& tmpnodes.find(link._ref2) != tmpnodes.end()){
 			node1 = tmpnodes[link._ref1];
 			node2 = tmpnodes[link._ref2];
+			//printf("saved node ref1: %s, ref2: %s\n", link._ref1.c_str(), link._ref2.c_str());
+			//printf("before node n1: %d,%f,%f,%f n2: %d,%f,%f,%f\n",
+			//	node1.id, node1.coord.x, node1.coord.y, node1.coord.z,
+			//	node2.id, node2.coord.x, node2.coord.y, node2.coord.z);
 
 			m = GAMEPLAY::GET_DISTANCE_BETWEEN_COORDS(node1.coord.x, node1.coord.y, 0, node2.coord.x, node2.coord.y, 0, FALSE);
 			link.direction.x = (node2.coord.x - node1.coord.x) / m; //Unitary vector pointing in the direction of the road
@@ -243,28 +266,31 @@ void LaneRewarder::populateNodes(const char* pathsfile){
 						//Empty on purpose
 					}
 			*/
-			if (nodes.find(node1.id) != nodes.end()) {
-				node1 = nodes.at(node1.id);
-			}
-			else{
-				nodes[node1.id] = node1;
-			}
 
-			if (nodes.find(node2.id) != nodes.end()) {
-				node2 = nodes.at(node2.id);
-			}
-			else {
+			//printf("saved node n1: %d,%f,%f,%f n2: %d,%f,%f,%f\n", 
+			//	node1.id, node1.coord.x, node1.coord.y, node1.coord.z,
+			//	node2.id, node2.coord.x, node2.coord.y, node2.coord.z);
+			if (node1.id != node2.id) {
+				setLinePoints(&node1, NULL, link);
+				setLinePoints(&node2, NULL, link);
+				nodes[node1.id] = node1;
 				nodes[node2.id] = node2;
 			}
-
-			setLinePoints(&node1, link);
-			setLinePoints(&node2, link);
+			else {
+				setLinePoints(&node1,NULL,link);
+				setLinePoints(&node2,&node1,link);
+				nodes[node1.id] = node1;
+				/*tmpCorrd.x = node2.coord.x;
+				tmpCorrd.y = node2.coord.y;
+				tmpCorrd.z = node2.coord.z;
+				nodes[node1.id].allCoords.push_back(tmpCorrd);*/
+			}
 		}
 	}
 	free(tmplinks);
 }
 
-void LaneRewarder::setLinePoints(tNode* node, tLink link){
+void LaneRewarder::setLinePoints(tNode* node, tNode* forNode, tLink link){
 
 	tLinePoint linePoint;
 	int linesIn, linesOut, starti;
@@ -321,8 +347,13 @@ void LaneRewarder::setLinePoints(tNode* node, tLink link){
 		linePoint.coord.z = node->coord.z;
 		link.linePoints.push_back(linePoint);
 	}
+	if (forNode == NULL) {
+		node->links.push_back(link);
+	}
+	else {
+		forNode->links.push_back(link);
+	}
 
-	node->links.push_back(link);
 }
 
 std::vector<tLinePoint> LaneRewarder::getCurrentLanePoints(tLink link, Vector3 currentPosition) {

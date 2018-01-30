@@ -69,10 +69,17 @@ public:
 	void config(const Value& sc, const Value& dc);
 	void setCommands(float throttle, float brake, float steering);
 	void run();
+	
+	std::string debugText;
+	DWORD debugTextDrawTicksMax;
+
+	void displayInfo();
+	void set_debug_text(std::string str, DWORD time );
+	void update_debug_text();
 
 	ScreenCapturer* screenCapturer;
 	StringBuffer generateMessage();
-
+	
 private:
 	void parseScenarioConfig(const Value& sc, bool setDefaults);
 	void parseDatasetConfig(const Value& dc, bool setDefaults);

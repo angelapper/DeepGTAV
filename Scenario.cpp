@@ -10,7 +10,7 @@
 #include <time.h>
 
 char* Scenario::weatherList[14] = { "CLEAR", "EXTRASUNNY", "CLOUDS", "OVERCAST", "RAIN", "CLEARING", "THUNDER", "SMOG", "FOGGY", "XMAS", "SNOWLIGHT", "BLIZZARD", "NEUTRAL", "SNOW" };
-char* Scenario::vehicleList[3] = { "blista", "voltic", "packer" };
+char* Scenario::vehicleList[3] = { "blista", "voltic" };
 
 void Scenario::parseScenarioConfig(const Value& sc, bool setDefaults) {
 	const Value& location = sc["location"];
@@ -47,7 +47,7 @@ void Scenario::parseScenarioConfig(const Value& sc, bool setDefaults) {
 	else if (setDefaults) _weather = weatherList[rand() % 14];
 
 	if (!vehicle.IsNull()) _vehicle = vehicle.GetString();
-	else if (setDefaults) _vehicle = vehicleList[rand() % 3];
+	else if (setDefaults) _vehicle = vehicleList[rand() % 2];
 
 	if (drivingMode.IsArray()) {
 		if (!drivingMode[0].IsNull()) _drivingMode = drivingMode[0].GetInt();
@@ -298,13 +298,70 @@ void Scenario::setCommands(float throttle, float brake, float steering) {
 	currentSteering = steering;
 }
 
+void Scenario::set_debug_text(std::string str, DWORD time = 2500)
+{
+	debugText = str;
+	debugTextDrawTicksMax = GetTickCount() + time;
+}
+
+void Scenario::displayInfo(){
+	Vector3  currentPosition, forwardVector, nodePos;
+	char output[100];
+	int nodeID;
+	Hash curStreetName;
+	Hash crosRoad;
+	char* sName;
+	char* cName;
+	
+	currentPosition = ENTITY::GET_ENTITY_COORDS(vehicle, FALSE);
+	forwardVector = ENTITY::GET_ENTITY_FORWARD_VECTOR(vehicle);
+
+//	PATHFIND::GET_STREET_NAME_AT_COORD(currentPosition.x, currentPosition.y, currentPosition.z,
+//		&curStreetName, &crosRoad);
+
+//	sName = UI::GET_STREET_NAME_FROM_HASH_KEY(curStreetName);
+//	cName = UI::GET_STREET_NAME_FROM_HASH_KEY(crosRoad);
+
+	nodeID = PATHFIND::GET_NTH_CLOSEST_VEHICLE_NODE_ID(currentPosition.x, currentPosition.y, currentPosition.z, 1, 1, 300, 300);
+	//PATHFIND::GET_VEHICLE_NODE_POSITION(nodeID, &nodePos); 
+
+	sprintf(output,"NodeId:%d,\n Currnet Pos: %f,%f,%f,\n Forwarder: %f,%f,%f\n",
+		nodeID,
+		currentPosition.x, currentPosition.y, currentPosition.z,
+		forwardVector.x, forwardVector.y, forwardVector.z);
+
+	set_debug_text(output, 2500);
+	update_debug_text();
+
+	GRAPHICS::DRAW_MARKER(6, currentPosition.x* forwardVector.x +10, currentPosition.y* forwardVector.y + 10, currentPosition.z,
+		0, 0, 0, 0, 0, 0, 2, 2, 2, 255, 128, 0, 200, 0, 1, 1, 0, 0, 0, 0);
+}
+
+void Scenario::update_debug_text()
+{
+	if (GetTickCount() < debugTextDrawTicksMax)
+	{
+		UI::SET_TEXT_FONT(0);
+		UI::SET_TEXT_SCALE(0.0, 0.40);
+		UI::SET_TEXT_COLOUR(255, 255, 255, 255);
+		UI::SET_TEXT_WRAP(0.0, 1.0);
+		UI::SET_TEXT_CENTRE(0);
+		UI::SET_TEXT_DROPSHADOW(0, 0, 0, 0, 0);
+		UI::SET_TEXT_EDGE(0, 0, 0, 0, 0);
+
+		UI::_SET_TEXT_ENTRY("STRING");
+		UI::_ADD_TEXT_COMPONENT_STRING((char *)debugText.c_str());
+		UI::_DRAW_TEXT(0.5, 0.2);
+	}
+}
+
+
 StringBuffer Scenario::generateMessage() {
 	StringBuffer buffer;
 	buffer.Clear();
 	Writer<StringBuffer> writer(buffer);
 	
 	screenCapturer->capture();
-
 	if (baseAddr) setBaseAddr();
 	if (vehicles) setVehiclesList();
 	if (peds) setPedsList();
@@ -645,6 +702,19 @@ void Scenario::setKeyDown() {
 	d["keys"] = down_keys;
 }
 
+/*
+direction:
+0 = You Have Arrive
+1 = Recalculating Route, Please make a u-turn where safe
+2 = Please Proceed the Highlighted Route
+3 = Keep Left (unsure)
+4 = In (distToNxJunction) Turn Left
+5 = In (distToNxJunction) Turn Right
+6 = Keep Right (unsure)
+7 = In (distToNxJunction) Go Straight Ahead
+8 = In (distToNxJunction) Join the freeway
+9 = In (distToNxJunction) Exit Freeway
+*/
 void Scenario::setDirection(){
 	int direction;
 	float distance;

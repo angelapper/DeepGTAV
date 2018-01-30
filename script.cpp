@@ -9,6 +9,7 @@
 
 void ScriptMain()
 {
+	// allocate in stack
 	Server server(8000);
 	while (true) {
 		while (!server.clientConnected) {

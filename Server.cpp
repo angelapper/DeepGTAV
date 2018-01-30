@@ -127,6 +127,12 @@ void Server::checkSendMessage() {
 	int error;
 	int r;
 
+	//set_status_text("here we are", 2500, false);
+	//update_status_text();
+#ifdef DEBUG
+	scenario.displayInfo();
+#endif
+
 	if (sendOutputs && (((float)(std::clock() - lastSentMessage) / CLOCKS_PER_SEC) > (1.0 / scenario.rate))) {
 		if (messageSize == 0) {
 			message = scenario.generateMessage();
@@ -194,6 +200,7 @@ void Server::checkSendMessage() {
 		}
 		lastSentMessage = std::clock();
 	}	
+
 }
 
 void Server::resetState() {
